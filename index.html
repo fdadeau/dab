@@ -1,0 +1,680 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Distributeur Automatique de Billets</title>
+    
+    <style type="text/css">
+#ihm {
+    position: relative;
+    width: 800px;
+    display: block;
+    height: auto;
+}
+
+#ecran {
+    border: solid 5px #A0A0A0;
+    height: 300px;
+    width: 600px;
+    color: white;
+    background-color: black;
+    vertical-align: middle;
+    padding: 100px 20px 0px 20px;
+    font-family: verdana, arial;
+    font-size: 20px;
+    font-weight: bold;
+    margin: 10px auto;
+}
+
+
+#clavier {
+    position: relative;
+    width: 450px;     
+    height: 300px;
+    cursor: pointer;
+    margin: 10px 100px;
+}
+
+body {
+    cursor: url(../images/hand.png) 0px 0px;
+}
+
+
+#clavier a, #clavier a:nth-of-type(10) {
+    float: left;
+    display: block;
+    width: 60px;
+    height: 40px;
+    color: black;
+    font-family: verdana, arial;
+    font-size: 25px;
+    font-weight: bold;
+    margin: 5px 15px;
+    padding-top: 5px;
+    text-align: center;
+    border-radius: 10px;
+    background-color: #C0C0C0;
+    cursor: pointer;
+}
+
+#clavier a:last-child {
+    margin-left: 105px;
+}
+
+#clavier #valider, #clavier #annuler, #clavier #supprimer {
+    width: 100px;
+    font-size: 15px;
+    padding-top: 15px;
+    margin-left: 20px;
+/*    position: absolute;*/
+    height: 35px;
+}
+
+
+#clavier #valider {
+/*    top: 150px;
+    right: -140px;*/
+    background-color: green;
+}
+
+#clavier #annuler {
+/*    top: 30px;
+    right: -140px;*/
+    background-color: red;
+}
+
+#clavier #supprimer {
+/*    top: 90px;
+    right: -140px;*/
+    background-color: orange;
+}
+
+
+#cartes {
+    float: right;
+    width: 200px;
+    cursor: pointer;
+}
+
+#cartes div {
+    cursor: pointer;   
+}
+
+#lecteur {
+    position: absolute;
+    right: 0px;
+    top: 450px;
+    width: 200px;
+    padding: 0px 10px;
+    height: 20px;
+    border: solid 5px #000;
+    border-radius: 3px;
+}
+
+#trappe {
+    position: absolute;
+    right: -100px;
+    top: 550px;
+    width: 300px;
+    padding: 0px 10px;
+    height: 20px;
+    border: solid 5px #000;
+    border-radius: 3px;
+}
+
+
+.imgCarte {
+    border: solid 1px #000;
+    margin: 10px auto;
+    font-size: 15px;
+    color: #FFF;
+    padding: 10px;
+    border-radius: 5px;
+    width: 150px;
+    height: 80px;
+    background-image: linear-gradient(0deg, orange, blue);
+}
+
+#carteDansLecteur {
+    display: none;
+    width: 100%;
+    height: 30px;
+    border-radius: 0 0 5px 5px;
+    border-bottom: solid 1px #000;
+    border-left: solid 1px #000;
+    border-right: solid 1px #000;
+    cursor: pointer;
+    background-image: linear-gradient(0deg, darkorange, orange);
+}
+
+#billetsDansTrappe {
+    display: none;
+    width: 100%;
+    height: 30px;
+    border-bottom: solid 1px #000;
+    border-left: solid 1px #000;
+    border-right: solid 1px #000;
+    cursor: pointer;
+    background-image: linear-gradient(90deg, pink, violet);
+}
+
+#billets c10 {
+    
+}
+    
+    
+    </style>
+    
+    <script>
+
+var STATES = { 
+    "veille"                    : 0, 
+    "transaction"               : 1, 
+    "incident"                  : 2, 
+    "attente_reprise_carte"     : 3, 
+    "attente_reprise_billets"   : 4,
+    "attente_pin"               : 5,
+    "choix_menu"                : 6,
+    "attente_montant"           : 7,
+    "erreur_pin"                : 8,
+    "erreur_montant"            : 9,
+    "verification"              : 10,
+    "solde"                     : 11
+}; 
+
+
+var CLAVIER = {
+    "supprimer" : -1,
+    "annuler" : -2,
+    "valider" : -3
+};
+
+
+function DAB(s) {
+    
+    var state = 0;
+    
+    var card = null;
+    
+    var solde = s;
+    
+    var currentTO = null;
+    
+    var currentPin = "";
+    
+    var currentMontant = 0;
+    
+    var callback = null;
+    
+    /**
+     * Card insertion (display update + call to verification)
+     * @param c     String      id of the inserted card
+     */
+    this.insertCard = function(c) {
+        if (card != null) {
+            return;
+        }   
+        card = JSON.parse(localStorage.getItem(c));
+        document.getElementById(c).style.visibility = "hidden";
+        document.getElementById("lecteurTXT").innerHTML = c;
+        this.afficher("Vérification de la carte...");
+        setTimeout("dab.verifierCarte()", 3000);
+    }
+    
+    
+    /**
+     *  Removes the current card from the card reader (display + reInit DAB)
+     */
+    this.removeCard = function() {
+        if (card != null) {
+            var cb = (callback != null);
+            if (callback != null) {
+                callback();   
+                callback = null;
+            }
+            document.getElementById(card.id).style.visibility="visible";   
+            document.getElementById("lecteurTXT").innerHTML = "";
+            writeCardInfos(card.id);
+            if (!cb) {
+                if (currentTO != null) {
+                    clearTimeout(currentTO);
+                    currentTO = null;
+                }
+                this.reInit();
+            }
+        }
+        card = null;
+    }
+    
+    /** 
+     *  Swallows the card (display update only)
+     */
+    this.avalerCarte = function() {
+        if (card != null) {
+            this.afficher("Carte confisquée.<br>Veuillez contacter l'organisme en charge du distributeur.");   
+            document.getElementById("lecteurTXT").innerHTML = "";
+            card = null;
+        }
+        document.getElementById("carteDansLecteur").style.display = "none";
+    }
+    
+    
+    /** 
+     *  Displays a message on the screen. 
+     */
+    this.afficher = function(msg) {
+        document.getElementById("ecran").innerHTML = msg;   
+    }
+    
+    
+    
+    this.toString = function() {
+        return "card = " + card;
+    }
+    
+    
+    
+    /** 
+     *  Card verification
+     */
+    this.verifierCarte = function() {
+        if (card.status == -1) {
+            this.afficher("Carte illisible.<br><br>Reprenez votre carte.");
+            this.ejecterCarte();
+            return;
+        }
+        if (card.status == -2) {
+            this.afficher("Carte inconnue.<br><br>Reprenez votre carte.");
+            this.ejecterCarte();
+            return;
+        }
+        if (card.status == -3) {
+            this.avalerCarte();
+            setTimeout("dab.reInit()", 3000);
+            return;
+        }
+        // check the date
+        var today = new Date();
+        var dateOK = today.getMonth() * 100 + today.getFullYear() % 100;
+        if (card.date%100 < dateOK%100 || Math.floor(card.date/100)<Math.floor(dateOK/100) && card.date%100 == dateOK%100) {
+            this.afficher("Carte expirée.<br><br>Reprenez votre carte.");   
+            this.ejecterCarte();
+            state = STATES.attente_reprise_carte;
+            return;
+        }
+        this.afficherMenu();
+    }
+
+    this.afficherMenu = function() {
+        state = STATES.choix_menu;
+        this.afficher("1. Consulter votre solde<br><br>2. Effectuer un retrait<br><br>3. Récupérer votre carte"); 
+    }
+    
+    this.ejecterCarte = function() {
+        document.getElementById("lecteurTXT").innerHTML = "";
+        document.getElementById("carteDansLecteur").style.display = "block";  
+        state = STATES.attente_reprise_carte;
+        currentTO = setTimeout("dab.carteNonPrise()", 6000);
+    }
+        
+        
+    this.reInit = function() {
+        state = STATES.veille;
+        currentMontant = 0;
+        callback = null;
+        this.afficher("En service.<br><br>Introduisez votre carte.");
+    }
+    
+    this.carteNonPrise = function() {
+        if (state == STATES.attente_reprise_carte && document.getElementById("carteDansLecteur").style.display == "block") {  
+            this.afficher("Délai écoulé. <br><br>Veuillez contacter l'organisme en charge du distributeur pour récupérer votre carte.");
+            this.avalerCarte();
+            setTimeout("dab.reInit()", 3000);
+        }
+    }
+    
+    
+    this.clavier = function(i) {
+        if (state == STATES.choix_menu) {
+            switch (i) {
+                case 1:
+                    this.afficherSolde();
+                    break;
+                case 2:
+                    this.resaisirPin();
+                    break;
+                case 3:
+                case CLAVIER.annuler:
+                    this.afficher("Reprenez votre carte");
+                    this.ejecterCarte();   
+            }   
+            return;
+        }
+        if (state == STATES.attente_pin) {
+            switch (i) {
+                case CLAVIER.annuler:
+                    currentPin = "";
+                    this.afficher("Transaction annulée.<br><br>Reprenez votre carte");
+                    this.ejecterCarte();   
+                    break;
+                case CLAVIER.supprimer:
+                    if (currentPin != "") {
+                        currentPin = currentPin.substring(0,currentPin.length-1);
+                        var p = "";
+                        for (var j=0; j < currentPin.length; j++) {
+                            p += "* ";
+                        }
+                        this.afficher("Composez votre code confidentiel à l'abri des regards et pressez la touche Valider<br><br>" + p);
+                    }
+                    break;
+                case CLAVIER.valider: 
+                    this.checkPin();
+                    break;
+                default: 
+                    currentPin = currentPin + "" + i;
+                    document.getElementById("ecran").innerHTML += "* ";
+            }
+            return;
+        }
+        if (state == STATES.attente_montant) {
+            switch (i) {
+                case CLAVIER.annuler:
+                    this.afficher("Transaction annulée.<br><br>Reprenez votre carte");
+                    this.ejecterCarte();
+                    break;
+                case 1:
+                    this.retirer(20);
+                    break;
+                case 2:
+                    this.retirer(30);
+                    break;
+                case 3:
+                    this.retirer(40);
+                    break;
+                case 4:
+                    this.retirer(50);
+                    break;
+                case 5:
+                    this.retirer(60);
+                    break;
+                case 6:
+                    this.retirer(80);
+                    break;
+                case 7:
+                    this.retirer(100);
+                    break;
+                case 8:
+                    this.retirer(150);
+                    break;                    
+            }
+            return;
+        }
+        if (this.state == STATES.afficherSolde) {
+            switch (i) {
+                case CLAVIER.annuler:
+                    this.afficher("Reprenez votre carte");
+                    this.ejecterCarte();   
+                    break;
+                case CLAVIER.valider:
+                    this.afficherMenu();
+                    break;
+            }
+            return;
+        }
+    }
+    
+    
+    this.checkPin = function() {
+        // PIN OK
+        if (currentPin == card.pin) {
+            card.essais = 3;
+            currentPin = "";
+            this.saveCard();
+            this.resaisirMontant();
+            return;
+        }
+        card.essais = card.essais - 1;
+        this.saveCard();
+        this.afficher("Code incorrect.");
+        state = STATES.erreur_pin;
+        setTimeout("dab.resaisirPin()", 3000);
+    }
+    
+    this.resaisirPin = function() {
+        currentPin = "";
+        if (card.essais == 0) {
+            this.afficher("Carte bloquée.<br><br>Veuillez reprendre votre carte.");
+            this.ejecterCarte();
+            return;
+        }
+        this.afficher("Composez votre code confidentiel à l'abri des regards et pressez la touche Valider<br><br>");
+        state = STATES.attente_pin;
+    }
+
+    this.resaisirMontant = function() {
+        this.afficher("Choisir le montant à retirer : <p>1. 20 euros <span style='float: right; width: 200px;'>2. 30 euros</span></p><p>3. 40 euros <span style='float: right; width: 200px;'>4. 50 euros</span></p><p>5. 60 euros <span style='float:right; width: 200px;'>6. 80 euros</span></p><p>7. 100 euros<span style='float: right; width: 200px;'>8. 150 euros</span></p><p><br>Tapez annuler pour retirer votre carte.</p>");
+        state = STATES.attente_montant;
+    }
+
+    
+    this.retirer = function(amount) {
+        state = STATES.verification;
+        this.afficher("Retrait de " + amount + " euros.<br><br>Nous interrogeons votre banque.<br>Veuillez patienter.");
+        setTimeout("dab.retirer2(" + amount + ")", 3000);
+    }
+    
+    this.retirer2 = function(amount) {
+        if (card.solde < amount) {
+            this.afficher("Solde insuffisant.");
+            state = STATES.erreur_montant;
+            setTimeout("dab.resaisirMontant()", 3000);
+            return;
+        }
+        currentMontant = amount;
+        this.afficher("Pour obtenir vos billets, veuillez prendre votre carte.");
+        callback = function() { dab.sortirBillets() };
+        this.ejecterCarte();
+    }
+    
+    
+    this.sortirBillets = function() {
+        this.afficher("Veuillez prendre vos billets.");
+        state = STATES.attente_reprise_billets;
+        card.solde -= currentMontant; 
+        this.saveCard();
+        document.getElementById("billetsDansTrappe").style.display = "block";
+        currentTO = setTimeout("dab.ravalerBillets()", 6000);
+    }   
+    
+    this.ravalerBillets = function() {
+       if (state == STATES.attente_reprise_billets && document.getElementById("billetsDansTrappe").style.display == "block") {  
+            currentTO = null;
+            this.afficher("Délai écoulé. <br><br>Billets perdus.");
+            document.getElementById("billetsDansTrappe").style.display = "none";
+            setTimeout("dab.reInit()", 3000);
+       }
+    }
+    
+    this.removeCash = function() {
+        if (state == STATES.attente_reprise_billets) {
+            clearTimeout(currentTO);
+            currentTO = null;
+            wallet += currentMontant;
+            updateWallet();
+            currentMontant = 0;
+            this.afficher("Merci et à bientôt.");
+            setTimeout("dab.reInit()", 3000);
+        }
+    }
+    
+    this.saveCard = function() {
+        localStorage.setItem(card.id, 
+                             '{ "id": "' + card.id + 
+                                '", "solde": ' + card.solde + 
+                                ', "essais": ' + card.essais + 
+                                ', "pin": ' + card.pin + 
+                                ', "status": ' + card.status + 
+                                ', "date": ' + card.date + '}');
+    }
+    
+    this.afficherSolde = function() {
+        state = STATES.afficherSolde;
+        this.afficher("Solde du compte : " + card.solde + "€<br><br>Appuyez sur valider pour revenir au menu");
+    }
+
+    this.reInit();
+};
+
+
+
+
+var dab = null; 
+
+var wallet = null;
+
+init = function() {
+
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 365);
+    var dateOK = tomorrow.getMonth() * 100 + tomorrow.getFullYear() % 100;
+    
+    var yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 365);
+    var dateKO = yesterday.getMonth() * 100 + yesterday.getFullYear() % 100;
+    
+    localStorage.setItem("carte1", '{ "id": "carte1", "solde": 100, "essais": 3, "pin": 1234, "status": 0, "date": ' + dateOK + '}');
+
+    localStorage.setItem("carte2", '{ "id": "carte2", "solde": 10, "essais": 3, "pin": 3456, "status": 0, "date": ' + dateKO + '}');
+
+    localStorage.setItem("carte3", '{ "id": "carte3", "solde": 100, "essais": 3, "pin": 7890, "status": -1, "date": ' + dateOK + '}');
+
+    localStorage.setItem("carte4", '{ "id": "carte4", "solde": 100, "essais": 3, "pin": 5432, "status": -2, "date": ' + dateOK + '}');
+
+    localStorage.setItem("carte5", '{ "id": "carte5", "solde": 100, "essais": 3, "pin": 8765, "status": -3, "date": ' + dateOK + '}');
+
+    writeCardInfos("carte1");
+    writeCardInfos("carte2");
+    writeCardInfos("carte3");
+    writeCardInfos("carte4");
+    writeCardInfos("carte5");
+    
+    dab = new DAB(5000);
+    
+    wallet = (localStorage.getItem("wallet")) ? localStorage.getItem("wallet") : 0;
+    updateWallet();
+    
+    // disable dblclick 
+    document.body.ondblclick = 
+    document.getElementById("ecran").ondblclick = 
+    document.getElementById("clavier").ondblclick = function(e) {
+        e.preventDefault();
+        return false;
+    }
+}
+
+writeCardInfos = function(c) {
+    
+    var status = ["OK", "illisible", "inconnue", "interdit"];
+        
+    var card = JSON.parse(localStorage.getItem(c));
+            
+    document.getElementById(c).innerHTML = 
+        "Solde = <span id='solde_" + card.id + "'>" + card.solde + "</span><br>" + 
+        "#essais = " + card.essais + "<br>" + 
+        "expire fin " + Math.floor(card.date/100) + "/" + (card.date%100) + "<br>" +  
+        "statut = " + status[Math.abs(card.status)];
+    
+}
+
+
+/******* IHM *********/
+
+function allowDrop(ev) {
+    ev.preventDefault();   
+}
+
+function drag(ev) {
+    ev.dataTransfer.setData("text", ev.target.id);   
+}
+
+function drop(ev) {
+    ev.preventDefault();
+    var data = ev.dataTransfer.getData("text");
+    dab.insertCard(data);
+}
+
+function updateWallet() {
+    document.getElementById("amount").innerHTML = wallet;
+}
+
+var buffer = [];
+
+function clavier(i) {
+    dab.clavier(i);
+}
+    
+    
+    </script>
+</head>
+
+<body onload="init()">
+
+    <div id="cartes">
+        <div id="carte1" class="imgCarte" draggable="true" ondragstart="drag(event)" onclick="dab.insertCard('carte1')"></div>
+        <div id="carte2" class="imgCarte" draggable="true" ondragstart="drag(event)" onclick="dab.insertCard('carte2')"></div>
+        <div id="carte3" class="imgCarte" draggable="true" ondragstart="drag(event)" onclick="dab.insertCard('carte3')"></div>
+        <div id="carte4" class="imgCarte" draggable="true" ondragstart="drag(event)" onclick="dab.insertCard('carte4')"></div>
+        <div id="carte5" class="imgCarte" draggable="true" ondragstart="drag(event)" onclick="dab.insertCard('carte5')"></div>
+        
+        <div id="billets">
+            Portefeuille : <span id="amount">0</span> euros.     
+        </div>
+        
+    </div>
+
+    <div id="ihm">
+        <div id="ecran"></div>
+        
+        <div id="clavier">
+            <a id="pad1" onclick="clavier(1)">1</a>
+            <a id="pad2" onclick="clavier(2)">2</a>
+            <a id="pad3" onclick="clavier(3)">3</a>
+            <a onclick="clavier(-1)" id="supprimer">Supprimer</a>
+
+            <a id="pad4" onclick="clavier(4)">4</a>
+            <a id="pad5" onclick="clavier(5)">5</a>
+            <a id="pad6" onclick="clavier(6)">6</a>
+            <a onclick="clavier(-2)" id="annuler">Annuler</a>
+            
+            <a id="pad7" onclick="clavier(7)">7</a>
+            <a id="pad8" onclick="clavier(8)">8</a>
+            <a id="pad9" onclick="clavier(9)">9</a>
+            <a onclick="clavier(-3)" id="valider">Valider</a>
+
+            <a id="pad0" onclick="clavier(0)">0</a>        
+            
+        </div>
+        
+        <div id="lecteur" ondrop="drop(event)" ondragover="allowDrop(event)">
+            <span id="lecteurTXT"></span>
+            <div id="carteDansLecteur" onclick="dab.removeCard(); document.getElementById('carteDansLecteur').style.display='none';">
+            </div>
+        </div>
+        
+        <div id="trappe">
+            <div id="billetsDansTrappe" onclick="dab.removeCash(); document.getElementById('billetsDansTrappe').style.display='none';">
+            </div>
+        </div>
+
+    </div>    
+    
+    
+</body>
+
+</html>
+
+
+
+
+
