@@ -444,8 +444,9 @@ function DAB(s) {
     this.resaisirPin = function() {
         currentPin = "";
         if (card.essais == 0) {
-            this.afficher("Carte bloquée.<br><br>Veuillez reprendre votre carte.");
-            this.ejecterCarte();
+            this.afficher("Carte bloquée.<br><br>Retrait impossible.");
+            //this.ejecterCarte();
+            setTimeout("dab.afficherMenu()", 3000);
             return;
         }
         this.afficher("Composez votre code confidentiel à l'abri des regards et pressez la touche Valider<br><br>");
