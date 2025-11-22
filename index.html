@@ -343,8 +343,8 @@ function DAB(s) {
                     break;
                 case 2:
                     if (card.essais == 0) {
-                        this.afficher("Carte bloquée. Retrait impossible.");
-                        setTimeout("dab.afficherMenu()", 3000);
+                        this.afficher("Carte bloquée. Retrait impossible. <br><br>Veuillez reprendre votre carte.");
+                        setTimeout("dab.ejecterCarte()", 2000);
                     }
                     else {
                         this.resaisirPin();
